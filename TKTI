@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pose & Sound Model Web</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-around;
+      padding: 20px;
+    }
+    .model-section {
+      width: 45%;
+      min-width: 300px;
+      border: 2px solid #ccc;
+      padding: 15px;
+      border-radius: 10px;
+    }
+    canvas {
+      border: 1px solid black;
+    }
+    .label-container div {
+      font-size: 18px;
+      margin-top: 5px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Pose Model Section -->
+  <div class="model-section">
+    <h2>Pose Model</h2>
+    <button onclick="initPose()">Start Pose Detection</button>
+    <canvas id="pose-canvas"></canvas>
+    <div id="pose-labels" class="label-container"></div>
+  </div>
+
+  <!-- Sound Model Section -->
+  <div class="model-section">
+    <h2>Sound Model</h2>
+    <button onclick="initSound()">Start Sound Detection</button>
+    <div id="sound-labels" class="label-container"></div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/pose@0.8"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/sound@0.8"></script>
+
+  <script>
+    // === Pose Model ===
+    const poseURL = "https://teachablemachine.withgoogle.com/models/kFbpo5E2Q/";
+    let poseModel, webcam, ctx, maxPosePredictions;
+
+    async function initPose() {
+      const modelURL = poseURL + "model.json";
+      const metadataURL = poseURL + "metadata.json";
+
+      poseModel = await tmPose.load(modelURL, metadataURL);
+      maxPosePredictions = poseModel.getTotalClasses();
+
+      const size = 300;
+      webcam = new tmPose.Webcam(size, size, true);
+      await webcam.setup();
+      await webcam.play();
+      window.requestAnimationFrame(poseLoop);
+
+      const canvas = document.getElementById("pose-canvas");
+      canvas.width = size;
+      canvas.height = size;
+      ctx = canvas.getContext("2d");
+
+      const labelContainer = document.getElementById("pose-labels");
+      labelContainer.innerHTML = ""; // clear
+      for (let i = 0; i < maxPosePredictions; i++) {
+        labelContainer.appendChild(document.createElement("div"));
+      }
+    }
+
+    async function poseLoop() {
+      webcam.update();
+      await predictPose();
+      window.requestAnimationFrame(poseLoop);
+    }
+
+    async function predictPose() {
+      const { pose, posenetOutput } = await poseModel.estimatePose(webcam.canvas);
+      const prediction = await poseModel.predict(posenetOutput);
+      const labelContainer = document.getElementById("pose-labels");
+
+      for (let i = 0; i < maxPosePredictions; i++) {
+        const classPrediction = prediction[i].className + ": " + prediction[i].probability.toFixed(2);
+        labelContainer.childNodes[i].innerHTML = classPrediction;
+      }
+
+      drawPose(pose);
+    }
+
+    function drawPose(pose) {
+      if (webcam.canvas) {
+        ctx.drawImage(webcam.canvas, 0, 0);
+        if (pose) {
+          const minConfidence = 0.5;
+          tmPose.drawKeypoints(pose.keypoints, minConfidence, ctx);
+          tmPose.drawSkeleton(pose.keypoints, minConfidence, ctx);
+        }
+      }
+    }
+  </script>
+
+  <script>
+    // === Sound Model ===
+    const soundURL = "https://teachablemachine.withgoogle.com/models/cRdufOEu8/";
+    let soundModel, soundMaxPredictions;
+
+    async function initSound() {
+      const modelURL = soundURL + "model.json";
+      const metadataURL = soundURL + "metadata.json";
+
+      try {
+        soundModel = await tmSound.load(modelURL, metadataURL);
+        soundMaxPredictions = soundModel.getTotalClasses();
+
+        const labelContainer = document.getElementById("sound-labels");
+        labelContainer.innerHTML = "";
+        for (let i = 0; i < soundMaxPredictions; i++) {
+          labelContainer.appendChild(document.createElement("div"));
+        }
+
+        // Loop prediksi suara
+        soundLoop();
+      } catch (err) {
+        alert("Gagal load model suara atau akses mic ditolak. Coba buka dengan localhost atau hosting.");
+        console.error(err);
+      }
+    }
+
+    async function soundLoop() {
+      const prediction = await soundModel.predict();
+      const labelContainer = document.getElementById("sound-labels");
+
+      for (let i = 0; i < soundMaxPredictions; i++) {
+        const classPrediction = prediction[i].className + ": " + prediction[i].probability.toFixed(2);
+        labelContainer.childNodes[i].innerHTML = classPrediction;
+      }
+
+      requestAnimationFrame(soundLoop);
+    }
+  </script>
+
+</body>
+</html>
